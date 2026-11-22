@@ -1,6 +1,7 @@
 import controller.Controller;
 import model.Config;
 import redis.clients.jedis.RedisClient;
+import redis.clients.jedis.exceptions.JedisConnectionException;
 import service.ConfigService;
 import service.LinkService;
 import service.UserService;
@@ -24,6 +25,8 @@ public class Main {
             Controller controller = new Controller(linkService, userId);
             ConsoleView console = new ConsoleView(controller);
             console.start();
+        } catch (JedisConnectionException e) {
+            System.err.println("[ERROR] Не удалось подключиться к Redis");
         }
     }
 }

@@ -2,6 +2,10 @@ package controller;
 import model.Link;
 import service.LinkService;
 
+import java.awt.Desktop;
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.List;
 
 public class Controller {
@@ -34,8 +38,17 @@ public class Controller {
         return linkService.getUserLinks(userId);
     }
 
-    public String resolveLink(String shortUrl) {
-        return linkService.resolveLink(shortUrl);
+    public void openLink(String shortUrl) {
+        if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+            throw new IllegalStateException("В этой среде нельзя открыть браузер");
+        }
+
+        String originalUrl = linkService.resolveLink(shortUrl);
+        try {
+            Desktop.getDesktop().browse(new URI(originalUrl));
+        } catch (IOException | URISyntaxException | SecurityException e) {
+            throw new IllegalStateException("Не удалось открыть ссылку в браузере", e);
+        }
     }
 
     public String formatShortUrl(Link link) {

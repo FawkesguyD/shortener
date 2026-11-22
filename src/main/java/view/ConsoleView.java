@@ -2,6 +2,7 @@ package view;
 
 import controller.Controller;
 import model.Link;
+import redis.clients.jedis.exceptions.JedisConnectionException;
 import redis.clients.jedis.exceptions.JedisException;
 
 import java.util.List;
@@ -13,7 +14,6 @@ public class ConsoleView {
     private static final String LINE = "─────────────────────────────────────────────";
     private final Scanner input = new Scanner(System.in);
     private final Controller controller;
-    private boolean linksVisible;
 
     public ConsoleView(Controller controller) {
         this.controller = controller;
@@ -27,12 +27,6 @@ public class ConsoleView {
 
             try {
                 switch (readInput("Команда")) {
-                    case "1" -> {
-                        linksVisible = true;
-                        if (!showLinkDetails("Просмотр ссылок")) {
-                            continue;
-                        }
-                    }
                     case "2" -> success = createLink();
                     case "3" -> success = deleteLink();
                     case "4" -> success = changeLink();
@@ -41,7 +35,7 @@ public class ConsoleView {
                             continue;
                         }
                     }
-                    case "6" -> resolveLink();
+                    case "6" -> success = openLink();
                     case "0" -> {
                         clearConsole();
                         System.out.println("URL SHORTENER / Goodbye!");
@@ -51,6 +45,8 @@ public class ConsoleView {
                 }
             } catch (NoSuchElementException e) {
                 return;
+            } catch (JedisConnectionException e) {
+                showError("Не удалось подключиться к Redis");
             } catch (JedisException e) {
                 showError("Не удалось выполнить операцию в Redis");
             } catch (IllegalArgumentException | SecurityException | IllegalStateException e) {
@@ -62,22 +58,32 @@ public class ConsoleView {
         }
     }
 
-    private void printLinkList(List<Link> links) {
+    private boolean showUserLinks() {
         System.out.println("Мои ссылки");
-        if (links.isEmpty()) {
-            System.out.println("  У вас пока нет ссылок");
-        } else {
-            for (Link link : links) {
-                System.out.printf("  [%s] %s → %s | %d/%d | %s%n",
-                        link.getShortKey(), controller.formatShortUrl(link), link.getOriginalUrl(),
-                        link.getClickCount(), link.getClickMax(), linkStatus(link));
+        try {
+            List<Link> links = controller.getUserLinks();
+            if (links.isEmpty()) {
+                System.out.println("  У вас пока нет ссылок");
+            } else {
+                for (Link link : links) {
+                    System.out.printf("  [%s] %s → %s | %d/%d | %s%n",
+                            link.getShortKey(), controller.formatShortUrl(link), link.getOriginalUrl(),
+                            link.getClickCount(), link.getClickMax(), linkStatus(link));
+                }
             }
+            return !links.isEmpty();
+        } catch (JedisConnectionException e) {
+            showError("Не удалось подключиться к Redis: список ссылок недоступен");
+        } catch (JedisException e) {
+            showError("Не удалось загрузить список ссылок из Redis");
+        } finally {
+            System.out.println(LINE);
         }
-        System.out.println(LINE);
+        return false;
     }
 
     private String createLink() {
-        showScreen("Создание ссылки", false);
+        showScreen("Создание ссылки");
 
         String originalUrl = readInput("Исходный URL");
 
@@ -98,7 +104,7 @@ public class ConsoleView {
     }
 
     private String deleteLink() {
-        showScreen("Удаление ссылки", true);
+        showScreen("Удаление ссылки");
 
         String shortUrl = readShortUrl();
         if (!"да".equalsIgnoreCase(readInput("Удалить ссылку? [да/нет]"))) {
@@ -111,7 +117,7 @@ public class ConsoleView {
     }
 
     private String changeLink() {
-        showScreen("Изменение ссылки", true);
+        showScreen("Изменение ссылки");
 
         String shortUrl = readShortUrl();
         String originalUrl = readInput("Новый исходный URL");
@@ -121,7 +127,7 @@ public class ConsoleView {
     }
 
     private boolean showLinkDetails(String title) {
-        if (!showScreen(title, true)) {
+        if (!showScreen(title)) {
             return true;
         }
         String shortUrl = readInput("Ключ или короткий URL для подробностей (Enter: в меню)");
@@ -135,9 +141,10 @@ public class ConsoleView {
         return true;
     }
 
-    private void resolveLink() {
-        showScreen("Переход по короткой ссылке", false);
-        showInfo("Адрес назначения: " + controller.resolveLink(readShortUrl()));
+    private String openLink() {
+        showScreen("Переход по короткой ссылке");
+        controller.openLink(readShortUrl());
+        return "Ссылка передана браузеру";
     }
 
     private String readShortUrl() {
@@ -160,29 +167,18 @@ public class ConsoleView {
     private void showHome(String success) {
         clearConsole();
         showMenu();
-        if (linksVisible) {
-            try {
-                printLinkList(controller.getUserLinks());
-            } catch (JedisException e) {
-                showError("Не удалось загрузить список ссылок из Redis");
-            }
-        }
+        showUserLinks();
         if (success != null) {
             showSuccess(success);
             System.out.println(LINE);
         }
     }
 
-    private boolean showScreen(String title, boolean includeLinks) {
+    private boolean showScreen(String title) {
         clearConsole();
         System.out.println("  ◆ " + title);
         System.out.println(LINE);
-        if (includeLinks || linksVisible) {
-            List<Link> links = controller.getUserLinks();
-            printLinkList(links);
-            return !links.isEmpty();
-        }
-        return false;
+        return showUserLinks();
     }
 
     private void showMenu() {
@@ -190,12 +186,11 @@ public class ConsoleView {
         System.out.println(LINE);
         System.out.println("""
                 Команды
-                  [1]  Просмотреть ссылки
                   [2]  Создать ссылку
                   [3]  Удалить ссылку
                   [4]  Изменить ссылку
                   [5]  Информация о ссылке
-                  [6]  Получить адрес перехода
+                  [6]  Открыть короткую ссылку в браузере
                 
                   [0]  Выход
                 
