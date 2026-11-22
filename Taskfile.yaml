@@ -14,9 +14,26 @@ tasks:
       - mvn compile
 
   run:
-    desc: Build & Run jvm
+    desc: Build and run JVM with Maven dependencies
     cmds:
-      - mvn compile && java -cp target/classes Main
+      - mvn compile exec:java
+
+  redis-up:
+    desc: Start Redis in Docker
+    cmds:
+      - docker compose up -d redis
+
+  redis-down:
+    desc: Stop Redis in Docker
+    cmds:
+      - docker compose down
+
+  run-with-redis:
+    desc: Start Redis and run JVM
+    deps:
+      - redis-up
+    cmds:
+      - mvn compile exec:java
 
   clean:
     desc: Clean build files
