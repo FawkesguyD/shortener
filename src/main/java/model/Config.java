@@ -2,17 +2,22 @@ package model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-import java.util.Objects;
+import java.net.URI;
+import java.net.URISyntaxException;
 
 public class Config {
 
     private final int lifetimeHours;
     private final int defaultMaxClicks;
     private final int keyLength;
-    private final String domain;
-    private final String method;
+    private final String baseUrl;
+    private final String redisUrl;
 
-    public Config(@JsonProperty("lifetimeHours") int lifetimeHours, @JsonProperty("defaultMaxClicks") int defaultMaxClicks, @JsonProperty("keyLength") int keyLength, @JsonProperty("domain") String domain, @JsonProperty("method") String method) {
+    public Config(@JsonProperty("lifetimeHours") int lifetimeHours,
+                  @JsonProperty("defaultMaxClicks") int defaultMaxClicks,
+                  @JsonProperty("keyLength") int keyLength,
+                  @JsonProperty("baseUrl") String baseUrl,
+                  @JsonProperty("redisUrl") String redisUrl) {
         if (lifetimeHours <= 0) {
             throw new IllegalArgumentException("Lifetime must be positive");
         }
@@ -25,18 +30,14 @@ public class Config {
             throw new IllegalArgumentException("Key length must be between 4 and 16");
         }
 
-        if (method == null || !method.equalsIgnoreCase("http") && !method.equalsIgnoreCase("https")) {
-            throw new IllegalArgumentException("Method must be http or https");
-        }
-        if (!domain.matches("^(?!-)[a-zA-Z0-9-]{1,63}(\\.[a-zA-Z0-9-]{1,63})+$")) {
-            throw new IllegalArgumentException("Wrong domain (example: domain.ru)");
-        }
+        validateBaseUrl(baseUrl);
+        validateRedisUrl(redisUrl);
 
         this.lifetimeHours = lifetimeHours;
         this.defaultMaxClicks = defaultMaxClicks;
         this.keyLength = keyLength;
-        this.domain = domain;
-        this.method = method;
+        this.baseUrl = normalizeBaseUrl(baseUrl);
+        this.redisUrl = redisUrl;
     }
 
     public int getLifetimeHours() { return lifetimeHours; }
@@ -45,7 +46,40 @@ public class Config {
 
     public int getKeyLength() { return keyLength; }
 
-    public String getDomain() { return domain; }
+    public String getBaseUrl() { return baseUrl; }
 
-    public String getMethod() { return method; }
+    public String getRedisUrl() { return redisUrl; }
+
+    private static void validateBaseUrl(String value) {
+        URI uri = parseUrl(value, "baseUrl");
+        if (uri.getHost() == null || uri.getPort() != -1 || uri.getRawUserInfo() != null ||
+                uri.getRawQuery() != null || uri.getRawFragment() != null ||
+                !("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme())) ||
+                !(uri.getPath().isEmpty() || "/".equals(uri.getPath()))) {
+            throw new IllegalArgumentException("baseUrl must be an HTTP(S) origin, for example https://clk.ru/");
+        }
+    }
+
+    private static void validateRedisUrl(String value) {
+        URI uri = parseUrl(value, "redisUrl");
+        if (uri.getHost() == null || uri.getPort() < 1 ||
+                !("redis".equalsIgnoreCase(uri.getScheme()) || "rediss".equalsIgnoreCase(uri.getScheme()))) {
+            throw new IllegalArgumentException("redisUrl must be a redis:// or rediss:// URL with a port");
+        }
+    }
+
+    private static URI parseUrl(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(field + " cannot be empty");
+        }
+        try {
+            return new URI(value);
+        } catch (URISyntaxException e) {
+            throw new IllegalArgumentException("Invalid " + field, e);
+        }
+    }
+
+    private static String normalizeBaseUrl(String value) {
+        return value.endsWith("/") ? value : value + "/";
+    }
 }
