@@ -11,26 +11,36 @@ import java.util.Scanner;
 public class ConsoleView {
 
     private static final String LINE = "─────────────────────────────────────────────";
-    private static final String POSTFIX = "  ❯ ";
     private final Scanner input = new Scanner(System.in);
     private final Controller controller;
+    private boolean linksVisible;
 
     public ConsoleView(Controller controller) {
         this.controller = controller;
     }
 
     public void start() {
+        String success = null;
         while (true) {
-            clearConsole();
-            showMenu();
+            showHome(success);
+            success = null;
 
             try {
-                switch (readInput()) {
-                    case "1" -> showLinks();
-                    case "2" -> createLink();
-                    case "3" -> deleteLink();
-                    case "4" -> changeLink();
-                    case "5" -> showLinkDetails();
+                switch (readInput("Команда")) {
+                    case "1" -> {
+                        linksVisible = true;
+                        if (!showLinkDetails("Просмотр ссылок")) {
+                            continue;
+                        }
+                    }
+                    case "2" -> success = createLink();
+                    case "3" -> success = deleteLink();
+                    case "4" -> success = changeLink();
+                    case "5" -> {
+                        if (!showLinkDetails("Информация о ссылке")) {
+                            continue;
+                        }
+                    }
                     case "6" -> resolveLink();
                     case "0" -> {
                         clearConsole();
@@ -46,31 +56,32 @@ public class ConsoleView {
             } catch (IllegalArgumentException | SecurityException | IllegalStateException e) {
                 showError(e.getMessage());
             }
-            if (!waitForEnter()) {
+            if (success == null && !waitForEnter()) {
                 return;
             }
         }
     }
 
-    private void showLinks() {
-        showScreen("Мои ссылки");
-
-        List<Link> links = controller.getUserLinks();
+    private void printLinkList(List<Link> links) {
+        System.out.println("Мои ссылки");
         if (links.isEmpty()) {
-            showInfo("У вас пока нет ссылок");
+            System.out.println("  У вас пока нет ссылок");
         } else {
-            links.forEach(this::printLink);
+            for (Link link : links) {
+                System.out.printf("  [%s] %s → %s | %d/%d | %s%n",
+                        link.getShortKey(), controller.formatShortUrl(link), link.getOriginalUrl(),
+                        link.getClickCount(), link.getClickMax(), linkStatus(link));
+            }
         }
+        System.out.println(LINE);
     }
 
-    private void createLink() {
-        showScreen("Создание ссылки");
+    private String createLink() {
+        showScreen("Создание ссылки", false);
 
-        System.out.println("Введите исходный URL");
-        String originalUrl = readInput();
+        String originalUrl = readInput("Исходный URL");
 
-        System.out.printf("Введите лимит переходов (Enter: %d)%n", controller.getDefaultMaxClicks());
-        String value = readInput();
+        String value = readInput("Лимит переходов (Enter: " + controller.getDefaultMaxClicks() + ")");
         int clickMax = 0;
         if (!value.isEmpty()) {
             try {
@@ -83,75 +94,102 @@ public class ConsoleView {
             }
         }
 
-        showSuccess("Короткая ссылка: " + controller.createLink(originalUrl, clickMax));
+        return "Короткая ссылка: " + controller.createLink(originalUrl, clickMax);
     }
 
-    private void deleteLink() {
-        showScreen("Удаление ссылки");
+    private String deleteLink() {
+        showScreen("Удаление ссылки", true);
 
         String shortUrl = readShortUrl();
-        System.out.println("Удалить ссылку? [да/нет]");
-        if (!"да".equalsIgnoreCase(readInput())) {
+        if (!"да".equalsIgnoreCase(readInput("Удалить ссылку? [да/нет]"))) {
             showInfo("Удаление отменено");
-            return;
+            return null;
         }
 
         controller.deleteLink(shortUrl);
-        showSuccess("Ссылка удалена");
+        return "Ссылка удалена";
     }
 
-    private void changeLink() {
-        showScreen("Изменение ссылки");
+    private String changeLink() {
+        showScreen("Изменение ссылки", true);
 
         String shortUrl = readShortUrl();
-        System.out.println("Введите новый исходный URL");
-        String originalUrl = readInput();
+        String originalUrl = readInput("Новый исходный URL");
 
-        Link updated = controller.updateLink(shortUrl, originalUrl);
-        showSuccess("Ссылка обновлена");
-        printLink(updated);
+        controller.updateLink(shortUrl, originalUrl);
+        return "Ссылка обновлена";
     }
 
-    private void showLinkDetails() {
-        showScreen("Информация о ссылке");
-        printLink(controller.getLink(readShortUrl()));
+    private boolean showLinkDetails(String title) {
+        if (!showScreen(title, true)) {
+            return true;
+        }
+        String shortUrl = readInput("Ключ или короткий URL для подробностей (Enter: в меню)");
+        if (shortUrl.isEmpty()) {
+            return false;
+        }
+        System.out.println();
+        System.out.println("Подробности ссылки");
+        System.out.println(LINE);
+        printLink(controller.getLink(shortUrl));
+        return true;
     }
 
     private void resolveLink() {
-        showScreen("Переход по короткой ссылке");
+        showScreen("Переход по короткой ссылке", false);
         showInfo("Адрес назначения: " + controller.resolveLink(readShortUrl()));
     }
 
     private String readShortUrl() {
-        System.out.println("Введите короткий URL или ключ ссылки");
-        return readInput();
+        return readInput("Ключ или короткий URL");
     }
 
     private void printLink(Link link) {
-        System.out.println();
         System.out.println("Короткая ссылка: " + controller.formatShortUrl(link));
         System.out.println("Исходный URL: " + link.getOriginalUrl());
         System.out.printf("Переходы: %d/%d%n", link.getClickCount(), link.getClickMax());
         System.out.println("Создана: " + link.getCreatedAt());
         System.out.printf("Действует до: %s%n", link.getExpiresAt() == null ? "без ограничения" : link.getExpiresAt());
-        System.out.println("Статус: " + (link.isExpired() ? "неактивна" : "активна"));
+        System.out.println("Статус: " + linkStatus(link));
     }
 
-    private void showScreen(String title) {
+    private String linkStatus(Link link) {
+        return link.isExpired() ? "неактивна" : "активна";
+    }
+
+    private void showHome(String success) {
         clearConsole();
         showMenu();
+        if (linksVisible) {
+            try {
+                printLinkList(controller.getUserLinks());
+            } catch (JedisException e) {
+                showError("Не удалось загрузить список ссылок из Redis");
+            }
+        }
+        if (success != null) {
+            showSuccess(success);
+            System.out.println(LINE);
+        }
+    }
 
-        System.out.println();
+    private boolean showScreen(String title, boolean includeLinks) {
+        clearConsole();
         System.out.println("  ◆ " + title);
         System.out.println(LINE);
-        System.out.println();
+        if (includeLinks || linksVisible) {
+            List<Link> links = controller.getUserLinks();
+            printLinkList(links);
+            return !links.isEmpty();
+        }
+        return false;
     }
 
     private void showMenu() {
-        System.out.printf("◆ URL SHORTENER | %s\n", controller.getUserId());
+        System.out.printf("◆ URL SHORTENER | %s%n", controller.getUserId());
         System.out.println(LINE);
         System.out.println("""
-                
+                Команды
                   [1]  Просмотреть ссылки
                   [2]  Создать ссылку
                   [3]  Удалить ссылку
@@ -180,16 +218,17 @@ public class ConsoleView {
         System.out.println("[INFO] " + message);
     }
 
-
-    private String readInput() {
-        System.out.print(POSTFIX);
+    private String readInput(String label) {
+        System.out.print(label + " ❯ ");
+        System.out.flush();
         return input.nextLine().trim();
     }
 
     private boolean waitForEnter() {
         System.out.println();
         System.out.println(LINE);
-        System.out.print("Нажмите Enter для продолжения...");
+        System.out.print("Enter: вернуться в меню ");
+        System.out.flush();
         if (!input.hasNextLine()) {
             return false;
         }
