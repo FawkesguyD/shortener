@@ -1,24 +1,16 @@
 package controller;
-import model.Config;
 import model.Link;
-import service.ConfigService;
 import service.LinkService;
-import service.UserService;
-import storage.LinkRepository;
-import storage.RedisStorage;
-import storage.UserRepository;
 
-import java.io.IOException;
+import java.util.List;
 
 public class Controller {
     private final LinkService linkService;
-    private final UserService userService;
     private final String userId;
 
 
-    public Controller(LinkService linkService, UserService userService, String userId) {
+    public Controller(LinkService linkService, String userId) {
         this.linkService = linkService;
-        this.userService = userService;
         this.userId = userId;
     }
 
@@ -26,20 +18,32 @@ public class Controller {
         linkService.deleteLink(userId, shortUrl);
     }
 
-    public void createLink(String url, int clickMax) {
-        linkService.createLink(userId, url, clickMax);
+    public String createLink(String url, int clickMax) {
+        return linkService.createLink(userId, url, clickMax);
     }
 
-    public void updateLink(String url, String newOriginalUrl) {
-        linkService.updateLink(userId, url, newOriginalUrl);
+    public Link updateLink(String url, String newOriginalUrl) {
+        return linkService.updateLink(userId, url, newOriginalUrl);
     }
 
-    public void getLink(String shortUrl) {
-        linkService.getLink(userId, shortUrl);
+    public Link getLink(String shortUrl) {
+        return linkService.getLink(userId, shortUrl);
     }
 
-    public void getUserLinks() {
-        linkService.getUserLinks(userId);
+    public List<Link> getUserLinks() {
+        return linkService.getUserLinks(userId);
+    }
+
+    public String resolveLink(String shortUrl) {
+        return linkService.resolveLink(shortUrl);
+    }
+
+    public String formatShortUrl(Link link) {
+        return linkService.formatShortUrl(link);
+    }
+
+    public int getDefaultMaxClicks() {
+        return linkService.getDefaultMaxClicks();
     }
 
     public String getUserId() {

@@ -29,7 +29,6 @@ public class LinkService {
 
         String shortKey = extractKey(shortUrl);
 
-        // Проверяем существование ссылки и владельца
         getLink(userId, shortKey);
 
         boolean updated = repository.updateLink(userId, shortKey, newOriginalUrl);
@@ -79,13 +78,28 @@ public class LinkService {
         return repository.getUserLinks(userId);
     }
 
+    public String resolveLink(String shortUrl) {
+        String originalUrl = repository.resolveLink(extractKey(shortUrl));
+        if (originalUrl == null) {
+            throw new IllegalArgumentException("Ссылка не найдена, просрочена или исчерпала лимит переходов");
+        }
+        return originalUrl;
+    }
+
+    public String formatShortUrl(Link link) {
+        return config.getBaseUrl() + link.getShortKey();
+    }
+
+    public int getDefaultMaxClicks() {
+        return config.getDefaultMaxClicks();
+    }
 
     public String createLink(String userId, String originalUrl, int clickMax) {
 
         validateOriginalUrl(originalUrl);
 
         int lifeTime = config.getLifetimeHours();
-        int clicks = clickMax == 0 ? config.getDefaultMaxClicks() : clickMax;
+        int clicks = clickMax == 0 ? getDefaultMaxClicks() : clickMax;
 
         Instant createdAt = Instant.now();
         Instant expiresAt = createdAt.plus(lifeTime, ChronoUnit.HOURS);
@@ -97,7 +111,7 @@ public class LinkService {
             Link link = new Link(userId, originalUrl, shortKey, 0, clicks, createdAt, expiresAt);
 
             if (repository.saveLinkIfAbsent(link)) {
-                return config.getBaseUrl() + shortKey;
+                return formatShortUrl(link);
             }
         }
 

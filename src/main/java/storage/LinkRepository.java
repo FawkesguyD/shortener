@@ -9,6 +9,8 @@ public interface LinkRepository {
 
     Link getLink(String shortKey);
 
+    String resolveLink(String shortKey);
+
     List<Link> getUserLinks(String userId);
 
     boolean updateLink(

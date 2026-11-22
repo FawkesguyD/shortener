@@ -21,7 +21,7 @@ public class Main {
             UserService userService = new UserService(storage);
 
             String userId = userService.getUserId();
-            Controller controller = new Controller(linkService, userService, userId);
+            Controller controller = new Controller(linkService, userId);
             ConsoleView console = new ConsoleView(controller);
             console.start();
         }

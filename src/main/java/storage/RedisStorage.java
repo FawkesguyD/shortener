@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.Map;
 
 public class RedisStorage implements LinkRepository, UserRepository {
-    // Keep the link and its owner's index in sync within a single Redis operation.
     private static final String SAVE_LINK = """
             if redis.call('EXISTS', KEYS[1]) == 1 then
                 return 0
@@ -36,6 +35,15 @@ public class RedisStorage implements LinkRepository, UserRepository {
             end
             redis.call('HSET', KEYS[1], 'originalUrl', ARGV[2])
             return 1
+            """;
+
+    private static final String RESOLVE_LINK = """
+            local link = redis.call('HMGET', KEYS[1], 'originalUrl', 'clickCount', 'clickMax')
+            if not link[1] or tonumber(link[2]) >= tonumber(link[3]) then
+                return nil
+            end
+            redis.call('HINCRBY', KEYS[1], 'clickCount', 1)
+            return link[1]
             """;
 
     private static final String DELETE_LINK = """
@@ -87,6 +95,11 @@ public class RedisStorage implements LinkRepository, UserRepository {
         return new Link(fields.get("ownerId"), fields.get("originalUrl"), shortKey,
                 Integer.parseInt(fields.get("clickCount")), Integer.parseInt(fields.get("clickMax")),
                 Instant.parse(fields.get("createdAt")), expiresAt.isEmpty() ? null : Instant.parse(expiresAt));
+    }
+
+    @Override
+    public String resolveLink(String shortKey) {
+        return (String) redis.eval(RESOLVE_LINK, List.of(linkKey(shortKey)), List.of());
     }
 
     @Override
