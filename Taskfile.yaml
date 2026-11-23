@@ -39,3 +39,15 @@ tasks:
     desc: Clean build files
     cmds:
       - mvn clean
+
+  test:
+    desc: Unit-tests
+    cmds:
+      - mvn test
+
+  test-with-redis:
+    desc: Common tests
+    deps:
+      - redis-up
+    cmds:
+      - mvn clean verify -Pintegration
