@@ -12,26 +12,35 @@ import java.util.List;
 
 public class ConfigService {
 
-    private static final Path CONFIG_PATH = Path.of(System.getProperty("user.home"), ".shortener", "config.json");
-
+    private final Path configPath;
     private final ObjectMapper mapper = new ObjectMapper();
+
+    public ConfigService() {
+        this(Path.of(System.getProperty("user.home"), ".shortener", "config.json"));
+    }
+
+    ConfigService(Path configPath) {
+        this.configPath = configPath.toAbsolutePath();
+    }
 
     public Config load() throws IOException {
 
-        Files.createDirectories(CONFIG_PATH.getParent());
+        Files.createDirectories(configPath.getParent());
 
-        if (Files.notExists(CONFIG_PATH)) {
+        if (Files.notExists(configPath)) {
             Config defaults = new Config(24, 10, 6, "https://clk.ru/", "redis://127.0.0.1:6380");
 
             Files.writeString(
-                    CONFIG_PATH,
+                    configPath,
                     mapper.writerWithDefaultPrettyPrinter()
                             .writeValueAsString(defaults),
                     StandardOpenOption.CREATE_NEW
             );
         }
 
-        ObjectNode configJson = (ObjectNode) mapper.readTree(CONFIG_PATH.toFile());
+        if (!(mapper.readTree(configPath.toFile()) instanceof ObjectNode configJson)) {
+            throw new IOException("Expected a configuration object in " + configPath);
+        }
         boolean migrated = false;
 
         if (!configJson.hasNonNull("baseUrl")) {
@@ -47,11 +56,8 @@ public class ConfigService {
         }
 
         Config config = mapper.treeToValue(configJson, Config.class);
-        if (config == null) {
-            throw new IOException("Expected a configuration object in " + CONFIG_PATH);
-        }
         if (migrated) {
-            Files.writeString(CONFIG_PATH,
+            Files.writeString(configPath,
                     mapper.writerWithDefaultPrettyPrinter().writeValueAsString(config),
                     StandardOpenOption.TRUNCATE_EXISTING);
         }

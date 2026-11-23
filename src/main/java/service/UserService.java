@@ -10,27 +10,32 @@ import java.util.UUID;
 public class UserService {
     private final UserRepository repository;
 
-    private static final Path USER_FILE = Path.of(System.getProperty("user.home"), ".shortener", "user.id");
+    private final Path userFile;
 
     public UserService(UserRepository repository) {
+        this(repository, Path.of(System.getProperty("user.home"), ".shortener", "user.id"));
+    }
+
+    UserService(UserRepository repository, Path userFile) {
         this.repository = repository;
+        this.userFile = userFile.toAbsolutePath();
     }
 
     public String getUserId() throws IOException {
 
         String userId;
-        if (Files.notExists(USER_FILE)) {
+        if (Files.notExists(userFile)) {
             userId = UUID.randomUUID().toString();
-            Files.createDirectories(USER_FILE.getParent());
-            Files.writeString(USER_FILE, userId, StandardOpenOption.CREATE_NEW);
+            Files.createDirectories(userFile.getParent());
+            Files.writeString(userFile, userId, StandardOpenOption.CREATE_NEW);
         } else {
-            userId = Files.readString(USER_FILE).trim();
+            userId = Files.readString(userFile).trim();
             try {
                 if (!UUID.fromString(userId).toString().equalsIgnoreCase(userId)) {
                     throw new IllegalArgumentException("Non-canonical UUID");
                 }
             } catch (IllegalArgumentException e) {
-                throw new IOException("Invalid user ID in " + USER_FILE, e);
+                throw new IOException("Invalid user ID in " + userFile, e);
             }
         }
         checkUser(userId);
